@@ -342,59 +342,80 @@ class HTTPProxyServer {
 
     // 双向转发数据（用于CONNECT隧道）
     private func bidirectionalForward(client: NWConnection, server: NWConnection) {
-        // 使用独立的状态跟踪
-        var clientClosed = false
-        var serverClosed = false
-        let closeLock = NSLock()
+        // 创建一个类来管理连接状态
+        class ConnectionPair {
+            var clientClosed = false
+            var serverClosed = false
+            let lock = NSLock()
 
-        // 客户端 -> 服务器
-        func forwardClientToServer() {
+            func checkAndClose(client: NWConnection, server: NWConnection) {
+                lock.lock()
+                let shouldClose = clientClosed && serverClosed
+                lock.unlock()
+
+                if shouldClose {
+                    print("⏹️ 双向连接都已关闭，清理资源")
+                    client.cancel()
+                    server.cancel()
+                }
+            }
+        }
+
+        let pair = ConnectionPair()
+
+        // 客户端 -> 服务器的转发
+        func pipeClientToServer() {
             client.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
                 if let data = data, !data.isEmpty {
-                    print("🔄 [C->S] 转发 \(data.count) 字节")
-                    server.send(content: data, completion: .contentProcessed { _ in })
+                    print("🔄 [C->S] \(data.count) 字节")
+                    server.send(content: data, completion: .contentProcessed { sendError in
+                        if sendError == nil && !isComplete {
+                            pipeClientToServer()
+                        }
+                    })
+                }
 
-                    if !isComplete {
-                        forwardClientToServer()
+                if isComplete || error != nil {
+                    if let error = error {
+                        print("⚠️ [C->S] 错误: \(error)")
                     }
-                } else if isComplete || error != nil {
-                    print("⏹️ [C->S] 客户端关闭")
-                    closeLock.lock()
-                    clientClosed = true
-                    if serverClosed {
-                        client.cancel()
-                        server.cancel()
-                    }
-                    closeLock.unlock()
+                    print("📪 [C->S] 客户端关闭")
+                    pair.lock.lock()
+                    pair.clientClosed = true
+                    pair.lock.unlock()
+                    pair.checkAndClose(client: client, server: server)
                 }
             }
         }
 
-        // 服务器 -> 客户端
-        func forwardServerToClient() {
+        // 服务器 -> 客户端的转发
+        func pipeServerToClient() {
             server.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
                 if let data = data, !data.isEmpty {
-                    print("🔄 [S->C] 转发 \(data.count) 字节")
-                    client.send(content: data, completion: .contentProcessed { _ in })
+                    print("🔄 [S->C] \(data.count) 字节")
+                    client.send(content: data, completion: .contentProcessed { sendError in
+                        if sendError == nil && !isComplete {
+                            pipeServerToClient()
+                        }
+                    })
+                }
 
-                    if !isComplete {
-                        forwardServerToClient()
+                if isComplete || error != nil {
+                    if let error = error {
+                        print("⚠️ [S->C] 错误: \(error)")
                     }
-                } else if isComplete || error != nil {
-                    print("⏹️ [S->C] 服务器关闭")
-                    closeLock.lock()
-                    serverClosed = true
-                    if clientClosed {
-                        client.cancel()
-                        server.cancel()
-                    }
-                    closeLock.unlock()
+                    print("📪 [S->C] 服务器关闭")
+                    pair.lock.lock()
+                    pair.serverClosed = true
+                    pair.lock.unlock()
+                    pair.checkAndClose(client: client, server: server)
                 }
             }
         }
 
-        forwardClientToServer()
-        forwardServerToClient()
+        print("🚀 开始双向转发")
+        pipeClientToServer()
+        pipeServerToClient()
     }
 
     // 单向转发数据（已废弃，使用上面的bidirectionalForward代替）
