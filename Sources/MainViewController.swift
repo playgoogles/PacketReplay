@@ -20,6 +20,14 @@ class MainViewController: UIViewController {
         title = "抓包重放工具"
         view.backgroundColor = .systemBackground
 
+        // 添加导出VPN配置按钮
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "安装VPN",
+            style: .plain,
+            target: self,
+            action: #selector(installVPNProfile)
+        )
+
         setupUI()
         setupManagers()
         loadData()
@@ -219,6 +227,61 @@ class MainViewController: UIViewController {
         } else {
             captureButton.isHidden = true
         }
+    }
+
+    @objc private func installVPNProfile() {
+        let alert = UIAlertController(
+            title: "安装VPN配置",
+            message: "要使用VPN抓包功能，需要先安装VPN描述文件。\n\n点击\"安装\"后，系统会打开描述文件安装页面，请按提示完成安装。",
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "安装", style: .default) { [weak self] _ in
+            self?.exportAndInstallVPNProfile()
+        })
+
+        present(alert, animated: true)
+    }
+
+    private func exportAndInstallVPNProfile() {
+        // 从应用Bundle中读取mobileconfig文件
+        guard let profilePath = Bundle.main.path(forResource: "PacketReplayVPN", ofType: "mobileconfig"),
+              let profileData = try? Data(contentsOf: URL(fileURLPath: profilePath)) else {
+            showError("无法找到VPN配置文件")
+            return
+        }
+
+        // 保存到临时目录
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("PacketReplayVPN.mobileconfig")
+        do {
+            try profileData.write(to: tempURL)
+
+            // 使用UIActivityViewController分享/安装
+            let activityVC = UIActivityViewController(activityItems: [tempURL], applicationActivities: nil)
+            activityVC.completionWithItemsHandler = { [weak self] _, completed, _, _ in
+                if completed {
+                    let successAlert = UIAlertController(
+                        title: "下一步",
+                        message: "描述文件已保存。\n\n请打开\"文件\"App，找到\"PacketReplayVPN.mobileconfig\"文件，点击安装。\n\n或者：\n设置 → 已下载描述文件 → 安装",
+                        preferredStyle: .alert
+                    )
+                    successAlert.addAction(UIAlertAction(title: "好的", style: .default))
+                    self?.present(successAlert, animated: true)
+                }
+            }
+
+            present(activityVC, animated: true)
+
+        } catch {
+            showError("导出失败: \(error.localizedDescription)")
+        }
+    }
+
+    private func showError(_ message: String) {
+        let alert = UIAlertController(title: "错误", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        present(alert, animated: true)
     }
 
     private func showPacketDetail(_ packet: CapturedPacket) {

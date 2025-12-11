@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <key>PayloadType</key>
+            <string>com.apple.vpn.managed</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>PayloadIdentifier</key>
+            <string>com.packet.replay.vpn</string>
+            <key>PayloadUUID</key>
+            <string>PACKET-REPLAY-VPN-UUID-0001</string>
+            <key>PayloadDisplayName</key>
+            <string>抓包重放VPN</string>
+            <key>PayloadDescription</key>
+            <string>用于网络包抓取和重放的VPN配置</string>
+
+            <key>UserDefinedName</key>
+            <string>抓包重放工具</string>
+
+            <key>VPNType</key>
+            <string>VPN</string>
+
+            <key>VPN</key>
+            <dict>
+                <key>RemoteAddress</key>
+                <string>127.0.0.1</string>
+
+                <key>AuthenticationMethod</key>
+                <string>Password</string>
+
+                <key>OnDemandEnabled</key>
+                <integer>0</integer>
+
+                <key>ProviderBundleIdentifier</key>
+                <string>com.packet.replay.tunnel</string>
+
+                <key>ProviderType</key>
+                <string>packet-tunnel</string>
+
+                <key>VendorConfig</key>
+                <dict>
+                    <key>server</key>
+                    <string>PacketReplay</string>
+                </dict>
+            </dict>
+        </dict>
+    </array>
+
+    <key>PayloadDisplayName</key>
+    <string>抓包重放VPN配置</string>
+    <key>PayloadIdentifier</key>
+    <string>com.packet.replay.profile</string>
+    <key>PayloadRemovalDisallowed</key>
+    <false/>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>PACKET-REPLAY-PROFILE-UUID</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+    <key>PayloadDescription</key>
+    <string>安装此配置文件以启用抓包重放工具的VPN功能</string>
+    <key>PayloadOrganization</key>
+    <string>PacketReplay</string>
+</dict>
+</plist>
