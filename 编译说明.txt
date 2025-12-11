@@ -1,0 +1,135 @@
+===============================================
+  抓包重放工具 - 编译说明
+===============================================
+
+✓ 项目已准备完成
+✓ Git仓库已初始化
+✓ 所有文件已提交
+
+由于在Windows环境无法直接编译iOS应用，
+请按照以下步骤使用GitHub自动编译：
+
+===============================================
+方法1：使用一键脚本（最简单）
+===============================================
+
+1. 双击运行: 快速上传GitHub.bat
+
+2. 按照提示操作：
+   - 先在浏览器创建GitHub仓库
+   - 输入你的GitHub用户名
+   - 等待自动上传
+
+3. 访问GitHub Actions页面查看编译进度
+
+===============================================
+方法2：手动操作
+===============================================
+
+步骤1：创建GitHub仓库
+----------------------
+1. 打开浏览器访问: https://github.com/new
+2. 仓库名称: PacketReplay
+3. 选择 Public（公开）
+4. 不要勾选任何初始化选项
+5. 点击 "Create repository"
+
+步骤2：推送代码
+----------------------
+在命令行中运行（替换你的用户名）：
+
+cd C:\Users\Administrator\PacketReplay
+git remote add origin https://github.com/你的用户名/PacketReplay.git
+git branch -M main
+git push -u origin main
+
+如果提示输入凭据：
+- 用户名: 你的GitHub用户名
+- 密码: 使用Personal Access Token（不是密码）
+  获取Token: https://github.com/settings/tokens
+
+步骤3：等待自动编译
+----------------------
+1. 访问: https://github.com/你的用户名/PacketReplay/actions
+2. 查看 "Build IPA" workflow运行状态
+3. 等待约3-5分钟编译完成
+4. 编译成功后，点击workflow进入详情页
+5. 在 "Artifacts" 部分下载 "PacketReplay-IPA"
+6. 解压ZIP文件得到 PacketReplay.ipa
+
+步骤4：安装到iPhone
+----------------------
+1. 将IPA文件传输到iPhone（通过AirDrop、文件App等）
+2. 在iPhone上打开TrollStore
+3. 点击IPA文件
+4. 点击"安装"
+5. 等待安装完成
+
+===============================================
+方法3：使用在线编译服务
+===============================================
+
+如果不想使用GitHub，也可以使用：
+
+Codemagic: https://codemagic.io
+- 免费账号每月500分钟构建时间
+- 支持从ZIP上传项目
+- 自动编译生成IPA
+
+Bitrise: https://bitrise.io
+- 免费账号每月有限构建
+- 支持GitHub集成
+
+===============================================
+常见问题
+===============================================
+
+Q: Git推送时提示Authentication failed？
+A: 需要使用Personal Access Token而不是密码
+   创建Token: https://github.com/settings/tokens
+   勾选 "repo" 权限，生成后复制使用
+
+Q: GitHub Actions编译失败？
+A: 查看Actions日志找到错误原因
+   常见问题：Swift语法错误、缺少文件
+
+Q: 下载的是ZIP文件而不是IPA？
+A: Artifacts会被打包成ZIP，解压即可得到IPA
+
+Q: 能否在本地编译？
+A: Windows/Linux需要安装Theos工具链
+   详见: BUILD_WITHOUT_MAC.md
+
+===============================================
+项目文件说明
+===============================================
+
+核心代码:
+  Sources/           Swift源代码
+  Info.plist         应用配置
+  Entitlements.plist 权限配置
+
+编译配置:
+  .github/workflows/build.yml  GitHub Actions配置
+  Makefile                     构建配置
+  build.sh                     Mac编译脚本
+
+文档:
+  README.md                使用说明
+  BUILD_WITHOUT_MAC.md     无Mac编译指南
+
+快捷工具:
+  快速上传GitHub.bat       一键上传脚本
+
+===============================================
+下一步行动
+===============================================
+
+推荐操作：
+1. 运行 "快速上传GitHub.bat"
+   或
+2. 手动执行上述步骤2的命令
+
+然后等待GitHub自动编译完成！
+
+===============================================
