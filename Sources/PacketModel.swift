@@ -8,7 +8,7 @@ struct CapturedPacket: Codable, Identifiable {
     let destinationIP: String
     let sourcePort: UInt16
     let destinationPort: UInt16
-    let protocol: PacketProtocol
+    let protocolType: PacketProtocol
     let data: Data
     let processName: String
     let requestURL: String?

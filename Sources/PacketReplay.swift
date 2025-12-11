@@ -23,7 +23,7 @@ class PacketReplayManager {
         print("开始重放包: \(packet.displayName)")
         onReplayProgress?("准备重放: \(packet.displayName)")
 
-        switch packet.protocol {
+        switch packet.protocolType {
         case .http, .https:
             replayHTTPPacket(packet, completion: completion)
         case .tcp:

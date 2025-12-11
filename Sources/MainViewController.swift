@@ -327,7 +327,7 @@ class PacketCell: UITableViewCell {
         titleLabel.text = packet.processName
         subtitleLabel.text = "\(packet.destinationIP):\(packet.destinationPort)"
         timeLabel.text = packet.dateString
-        protocolLabel.text = packet.protocol.rawValue
+        protocolLabel.text = packet.protocolType.rawValue
     }
 }
 

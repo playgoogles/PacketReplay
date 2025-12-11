@@ -53,7 +53,7 @@ class PacketDetailViewController: UIViewController {
         info += "=== 基本信息 ===\n"
         info += "时间: \(packet.timestamp)\n"
         info += "进程: \(packet.processName)\n"
-        info += "协议: \(packet.protocol.rawValue)\n\n"
+        info += "协议: \(packet.protocolType.rawValue)\n\n"
 
         info += "=== 网络信息 ===\n"
         info += "源地址: \(packet.sourceIP):\(packet.sourcePort)\n"
