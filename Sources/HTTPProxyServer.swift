@@ -95,8 +95,14 @@ class HTTPProxyServer {
                 // 捕获请求
                 self.captureRequest(data, requestString: requestString)
 
-                // 转发请求
-                self.forwardRequest(data, requestString: requestString, to: clientConnection)
+                // 检查是否是CONNECT方法（用于HTTPS）
+                if requestString.hasPrefix("CONNECT ") {
+                    print("🔐 检测到CONNECT请求，建立隧道")
+                    self.handleConnectMethod(requestString: requestString, clientConnection: clientConnection)
+                } else {
+                    // 转发普通HTTP请求
+                    self.forwardRequest(data, requestString: requestString, to: clientConnection)
+                }
             } else {
                 print("⚠️ 无法解析请求")
                 clientConnection.cancel()
@@ -233,6 +239,106 @@ class HTTPProxyServer {
                 print("✅ 响应传输完成")
                 serverConnection.cancel()
                 clientConnection.cancel()
+            }
+        }
+    }
+
+    // 处理CONNECT方法（HTTPS隧道）
+    private func handleConnectMethod(requestString: String, clientConnection: NWConnection) {
+        let lines = requestString.components(separatedBy: "\r\n")
+        guard let firstLine = lines.first else {
+            print("❌ CONNECT请求格式错误")
+            clientConnection.cancel()
+            return
+        }
+
+        // 解析 "CONNECT host:port HTTP/1.1"
+        let components = firstLine.components(separatedBy: " ")
+        guard components.count >= 2 else {
+            print("❌ CONNECT请求格式错误")
+            clientConnection.cancel()
+            return
+        }
+
+        let hostPort = components[1]
+        let parts = hostPort.split(separator: ":")
+        guard parts.count == 2,
+              let targetPort = UInt16(parts[1]) else {
+            print("❌ 无法解析目标地址: \(hostPort)")
+            clientConnection.cancel()
+            return
+        }
+
+        let targetHost = String(parts[0])
+        print("🔐 CONNECT隧道: \(targetHost):\(targetPort)")
+
+        // 连接到目标服务器
+        let host = NWEndpoint.Host(targetHost)
+        let port = NWEndpoint.Port(rawValue: targetPort)!
+        let serverConnection = NWConnection(host: host, port: port, using: .tcp)
+
+        serverConnection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .ready:
+                print("✅ 隧道已建立")
+                // 返回200 Connection Established
+                let response = "HTTP/1.1 200 Connection Established\r\n\r\n"
+                if let responseData = response.data(using: .utf8) {
+                    clientConnection.send(content: responseData, completion: .contentProcessed { error in
+                        if let error = error {
+                            print("❌ 发送响应失败: \(error)")
+                            clientConnection.cancel()
+                            serverConnection.cancel()
+                        } else {
+                            print("📤 已发送200响应，开始双向转发")
+                            // 开始双向转发数据
+                            self?.bidirectionalForward(client: clientConnection, server: serverConnection)
+                        }
+                    })
+                }
+            case .failed(let error):
+                print("❌ 连接目标服务器失败: \(error)")
+                let response = "HTTP/1.1 502 Bad Gateway\r\n\r\n"
+                if let responseData = response.data(using: .utf8) {
+                    clientConnection.send(content: responseData, completion: .contentProcessed { _ in
+                        clientConnection.cancel()
+                    })
+                } else {
+                    clientConnection.cancel()
+                }
+            default:
+                break
+            }
+        }
+
+        serverConnection.start(queue: queue)
+    }
+
+    // 双向转发数据（用于CONNECT隧道）
+    private func bidirectionalForward(client: NWConnection, server: NWConnection) {
+        // 客户端 -> 服务器
+        forwardData(from: client, to: server, direction: "C->S")
+        // 服务器 -> 客户端
+        forwardData(from: server, to: client, direction: "S->C")
+    }
+
+    // 单向转发数据
+    private func forwardData(from source: NWConnection, to destination: NWConnection, direction: String) {
+        source.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            if let data = data, !data.isEmpty {
+                print("🔄 [\(direction)] 转发 \(data.count) 字节")
+                destination.send(content: data, completion: .contentProcessed { _ in })
+
+                // 继续转发
+                if !isComplete {
+                    self?.forwardData(from: source, to: destination, direction: direction)
+                }
+            }
+
+            if isComplete || error != nil {
+                print("⏹️ [\(direction)] 连接关闭")
+                source.cancel()
+                destination.cancel()
             }
         }
     }
