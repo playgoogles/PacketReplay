@@ -20,12 +20,12 @@ class MainViewController: UIViewController {
         title = "抓包重放工具"
         view.backgroundColor = .systemBackground
 
-        // 添加导出VPN配置按钮
+        // 添加调试按钮
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: "安装VPN",
+            title: "VPN状态",
             style: .plain,
             target: self,
-            action: #selector(installVPNProfile)
+            action: #selector(checkVPNStatus)
         )
 
         setupUI()
@@ -227,6 +227,61 @@ class MainViewController: UIViewController {
         } else {
             captureButton.isHidden = true
         }
+    }
+
+    @objc private func checkVPNStatus() {
+        // 检查VPN管理器状态
+        let status = VPNManager.shared.getCurrentStatus()
+        var message = "VPN状态: "
+
+        switch status {
+        case .invalid:
+            message += "未配置\n\n这是正常的，点击\"开始抓包\"会自动创建VPN配置"
+        case .disconnected:
+            message += "已断开\n\n配置存在，可以点击\"开始抓包\"连接"
+        case .connecting:
+            message += "连接中..."
+        case .connected:
+            message += "✓ 已连接\n\n可以正常抓包"
+        case .reasserting:
+            message += "重新连接中..."
+        case .disconnecting:
+            message += "断开中..."
+        @unknown default:
+            message += "未知状态"
+        }
+
+        // 检查Extension是否存在
+        let bundlePath = Bundle.main.bundlePath
+        let extensionPath = (bundlePath as NSString).appendingPathComponent("PlugIns/PacketTunnelExtension.appex")
+        let extensionExists = FileManager.default.fileExists(atPath: extensionPath)
+
+        message += "\n\nExtension状态: "
+        message += extensionExists ? "✓ 已安装" : "✗ 未找到"
+
+        if !extensionExists {
+            message += "\n\n⚠️ Extension未安装！\n这可能是编译问题，请检查GitHub Actions的编译日志。"
+        }
+
+        let alert = UIAlertController(title: "诊断信息", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "确定", style: .default))
+
+        if !extensionExists {
+            alert.addAction(UIAlertAction(title: "查看路径", style: .default) { _ in
+                let pathAlert = UIAlertController(
+                    title: "Extension路径",
+                    message: "应该在: \(extensionPath)\n\n实际Bundle路径: \(bundlePath)",
+                    preferredStyle: .alert
+                )
+                pathAlert.addAction(UIAlertAction(title: "复制路径", style: .default) { _ in
+                    UIPasteboard.general.string = extensionPath
+                })
+                pathAlert.addAction(UIAlertAction(title: "关闭", style: .cancel))
+                self.present(pathAlert, animated: true)
+            })
+        }
+
+        present(alert, animated: true)
     }
 
     @objc private func installVPNProfile() {
