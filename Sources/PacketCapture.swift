@@ -1,7 +1,6 @@
 import Foundation
-import NetworkExtension
 
-// 网络包捕获管理器 (使用VPN模式)
+// 网络包捕获管理器 (使用HTTP代理模式)
 class PacketCaptureManager {
     static let shared = PacketCaptureManager()
 
@@ -13,23 +12,22 @@ class PacketCaptureManager {
 
     init() {
         capturedPackets = PacketStorage.shared.loadPackets()
-        setupVPNCallbacks()
+        setupProxyCallbacks()
     }
 
-    // 设置VPN回调
-    private func setupVPNCallbacks() {
-        // VPN状态变化
-        VPNManager.shared.onStatusChanged = { [weak self] status in
+    // 设置代理服务器回调
+    private func setupProxyCallbacks() {
+        // 代理服务器状态变化
+        HTTPProxyServer.shared.onStatusChanged = { [weak self] isRunning in
             DispatchQueue.main.async {
-                let isConnected = (status == .connected)
-                self?.isCapturing = isConnected
-                self?.onStatusChanged?(isConnected)
+                self?.isCapturing = isRunning
+                self?.onStatusChanged?(isRunning)
             }
         }
 
         // 新包到达
-        VPNManager.shared.onPacketCaptured = { [weak self] packetDict in
-            self?.processVPNPacket(packetDict)
+        HTTPProxyServer.shared.onPacketCaptured = { [weak self] packet in
+            self?.processPacket(packet)
         }
     }
 
@@ -37,29 +35,15 @@ class PacketCaptureManager {
     func startCapture() {
         guard !isCapturing else { return }
 
-        print("启动VPN抓包...")
-
-        VPNManager.shared.startVPN { [weak self] success, error in
-            if success {
-                print("VPN启动成功，开始抓包")
-                DispatchQueue.main.async {
-                    self?.isCapturing = true
-                    self?.onStatusChanged?(true)
-                }
-            } else {
-                print("VPN启动失败: \(error ?? "未知错误")")
-                DispatchQueue.main.async {
-                    self?.onStatusChanged?(false)
-                }
-            }
-        }
+        print("启动HTTP代理抓包...")
+        HTTPProxyServer.shared.start()
     }
 
     // 停止抓包
     func stopCapture() {
         guard isCapturing else { return }
 
-        VPNManager.shared.stopVPN()
+        HTTPProxyServer.shared.stop()
         isCapturing = false
         onStatusChanged?(false)
 
@@ -69,44 +53,8 @@ class PacketCaptureManager {
         print("停止抓包，共抓取 \(capturedPackets.count) 个包")
     }
 
-    // 处理VPN抓取的包
-    private func processVPNPacket(_ packetDict: [String: Any]) {
-        guard let id = packetDict["id"] as? String,
-              let timestamp = packetDict["timestamp"] as? TimeInterval,
-              let sourceIP = packetDict["sourceIP"] as? String,
-              let destIP = packetDict["destinationIP"] as? String,
-              let sourcePort = packetDict["sourcePort"] as? UInt16,
-              let destPort = packetDict["destinationPort"] as? UInt16,
-              let protocolStr = packetDict["protocol"] as? String,
-              let dataBase64 = packetDict["data"] as? String,
-              let data = Data(base64Encoded: dataBase64) else {
-            return
-        }
-
-        // 转换协议类型
-        let protocolType: PacketProtocol
-        switch protocolStr {
-        case "TCP": protocolType = .tcp
-        case "UDP": protocolType = .udp
-        default: protocolType = .unknown
-        }
-
-        // 创建包对象
-        let packet = CapturedPacket(
-            id: UUID(uuidString: id) ?? UUID(),
-            timestamp: Date(timeIntervalSince1970: timestamp),
-            sourceIP: sourceIP,
-            destinationIP: destIP,
-            sourcePort: sourcePort,
-            destinationPort: destPort,
-            protocolType: protocolType,
-            data: data,
-            processName: "System",
-            requestURL: nil,
-            headers: nil
-        )
-
-        // 添加到列表
+    // 处理捕获的包
+    private func processPacket(_ packet: CapturedPacket) {
         DispatchQueue.main.async { [weak self] in
             self?.capturedPackets.insert(packet, at: 0)
 
@@ -128,6 +76,11 @@ class PacketCaptureManager {
     func clearPackets() {
         capturedPackets.removeAll()
         PacketStorage.shared.savePackets([])
-        VPNManager.shared.clearAllPackets()
+    }
+
+    // 获取代理配置信息
+    func getProxyConfiguration() -> (host: String, port: UInt16) {
+        let host = HTTPProxyServer.shared.getLocalIPAddress() ?? "127.0.0.1"
+        return (host, 8888)
     }
 }

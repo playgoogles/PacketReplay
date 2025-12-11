@@ -20,12 +20,12 @@ class MainViewController: UIViewController {
         title = "抓包重放工具"
         view.backgroundColor = .systemBackground
 
-        // 添加调试按钮
+        // 添加配置按钮
         navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: "VPN状态",
+            title: "配置代理",
             style: .plain,
             target: self,
-            action: #selector(checkVPNStatus)
+            action: #selector(showProxyConfiguration)
         )
 
         setupUI()
@@ -37,7 +37,7 @@ class MainViewController: UIViewController {
         // 状态标签
         statusLabel = UILabel()
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        statusLabel.text = "就绪 (VPN模式)"
+        statusLabel.text = "就绪 (HTTP代理模式)"
         statusLabel.textAlignment = .center
         statusLabel.font = .systemFont(ofSize: 14)
         statusLabel.textColor = .secondaryLabel
@@ -123,8 +123,15 @@ class MainViewController: UIViewController {
             DispatchQueue.main.async {
                 self?.isCapturing = capturing
                 self?.updateCaptureButton()
-                self?.statusLabel.text = capturing ? "正在抓包... (VPN已连接)" : "就绪 (VPN模式)"
-                self?.statusLabel.textColor = capturing ? .systemGreen : .secondaryLabel
+
+                if capturing {
+                    let config = PacketCaptureManager.shared.getProxyConfiguration()
+                    self?.statusLabel.text = "代理运行中: \(config.host):\(config.port)"
+                    self?.statusLabel.textColor = .systemGreen
+                } else {
+                    self?.statusLabel.text = "就绪 (HTTP代理模式)"
+                    self?.statusLabel.textColor = .secondaryLabel
+                }
             }
         }
 
@@ -164,38 +171,48 @@ class MainViewController: UIViewController {
         if isCapturing {
             PacketCaptureManager.shared.stopCapture()
         } else {
-            // 显示Loading提示
-            let loadingAlert = UIAlertController(title: "请稍候", message: "正在启动VPN抓包...", preferredStyle: .alert)
-            present(loadingAlert, animated: true)
-
-            // 延迟一下让提示显示出来
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            // 检查是否首次使用
+            if !UserDefaults.standard.bool(forKey: "hasShownProxyGuide") {
+                showFirstTimeProxyGuide()
+            } else {
                 PacketCaptureManager.shared.startCapture()
-
-                // 3秒后关闭loading
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    loadingAlert.dismiss(animated: true) { [weak self] in
-                        // 检查VPN状态
-                        let status = VPNManager.shared.getCurrentStatus()
-                        if status != .connected && status != .connecting {
-                            // VPN启动可能失败，显示提示
-                            let errorAlert = UIAlertController(
-                                title: "需要授权",
-                                message: "请在弹出的系统提示中点击\"允许\"以启用VPN抓包功能。\n\n如果没有看到提示，请到：\n设置 → 通用 → VPN与设备管理\n中查看VPN配置。",
-                                preferredStyle: .alert
-                            )
-                            errorAlert.addAction(UIAlertAction(title: "我知道了", style: .default))
-                            errorAlert.addAction(UIAlertAction(title: "打开设置", style: .default) { _ in
-                                if let url = URL(string: "App-Prefs:root=General&path=ManagedConfigurationList") {
-                                    UIApplication.shared.open(url)
-                                }
-                            })
-                            self?.present(errorAlert, animated: true)
-                        }
-                    }
-                }
             }
         }
+    }
+
+    private func showFirstTimeProxyGuide() {
+        let config = PacketCaptureManager.shared.getProxyConfiguration()
+
+        let alert = UIAlertController(
+            title: "首次使用说明",
+            message: """
+            HTTP代理模式需要配置WiFi代理：
+
+            1. 打开 设置 → WiFi
+            2. 点击已连接的WiFi后面的 ⓘ
+            3. 滚动到底部，点击"配置代理"
+            4. 选择"手动"
+            5. 输入：
+               服务器：\(config.host)
+               端口：\(config.port)
+            6. 点击"存储"
+
+            配置完成后，点击"开始抓包"即可。
+            """,
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "我知道了", style: .default) { [weak self] _ in
+            UserDefaults.standard.set(true, forKey: "hasShownProxyGuide")
+            PacketCaptureManager.shared.startCapture()
+        })
+
+        alert.addAction(UIAlertAction(title: "查看详细配置", style: .default) { [weak self] _ in
+            UserDefaults.standard.set(true, forKey: "hasShownProxyGuide")
+            self?.showProxyConfiguration()
+        })
+
+        present(alert, animated: true)
     }
 
     @objc private func clearData() {
@@ -229,108 +246,52 @@ class MainViewController: UIViewController {
         }
     }
 
-    @objc private func checkVPNStatus() {
-        // 检查VPN管理器状态
-        let status = VPNManager.shared.getCurrentStatus()
-        var message = "VPN状态: "
+    @objc private func showProxyConfiguration() {
+        let config = PacketCaptureManager.shared.getProxyConfiguration()
 
-        switch status {
-        case .invalid:
-            message += "未配置\n\n这是正常的，点击\"开始抓包\"会自动创建VPN配置"
-        case .disconnected:
-            message += "已断开\n\n配置存在，可以点击\"开始抓包\"连接"
-        case .connecting:
-            message += "连接中..."
-        case .connected:
-            message += "✓ 已连接\n\n可以正常抓包"
-        case .reasserting:
-            message += "重新连接中..."
-        case .disconnecting:
-            message += "断开中..."
-        @unknown default:
-            message += "未知状态"
-        }
-
-        // 检查Extension是否存在
-        let bundlePath = Bundle.main.bundlePath
-        let extensionPath = (bundlePath as NSString).appendingPathComponent("PlugIns/PacketTunnelExtension.appex")
-        let extensionExists = FileManager.default.fileExists(atPath: extensionPath)
-
-        message += "\n\nExtension状态: "
-        message += extensionExists ? "✓ 已安装" : "✗ 未找到"
-
-        if !extensionExists {
-            message += "\n\n⚠️ Extension未安装！\n这可能是编译问题，请检查GitHub Actions的编译日志。"
-        }
-
-        let alert = UIAlertController(title: "诊断信息", message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
-
-        if !extensionExists {
-            alert.addAction(UIAlertAction(title: "查看路径", style: .default) { _ in
-                let pathAlert = UIAlertController(
-                    title: "Extension路径",
-                    message: "应该在: \(extensionPath)\n\n实际Bundle路径: \(bundlePath)",
-                    preferredStyle: .alert
-                )
-                pathAlert.addAction(UIAlertAction(title: "复制路径", style: .default) { _ in
-                    UIPasteboard.general.string = extensionPath
-                })
-                pathAlert.addAction(UIAlertAction(title: "关闭", style: .cancel))
-                self.present(pathAlert, animated: true)
-            })
-        }
-
-        present(alert, animated: true)
-    }
-
-    @objc private func installVPNProfile() {
         let alert = UIAlertController(
-            title: "安装VPN配置",
-            message: "要使用VPN抓包功能，需要先安装VPN描述文件。\n\n点击\"安装\"后，系统会打开描述文件安装页面，请按提示完成安装。",
+            title: "HTTP代理配置",
+            message: """
+            请在WiFi设置中配置HTTP代理：
+
+            📱 配置步骤：
+            1. 打开「设置」→「WiFi」
+            2. 点击已连接WiFi后面的 ⓘ
+            3. 滚动到底部，找到「配置代理」
+            4. 选择「手动」
+            5. 输入以下信息：
+               • 服务器：\(config.host)
+               • 端口：\(config.port)
+            6. 点击「存储」
+
+            ✅ 配置完成后：
+            返回应用，点击「开始抓包」即可。
+
+            💡 提示：
+            • 停止抓包后记得关闭代理
+            • 仅抓取HTTP流量（HTTPS需要证书）
+            """,
             preferredStyle: .alert
         )
 
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-        alert.addAction(UIAlertAction(title: "安装", style: .default) { [weak self] _ in
-            self?.exportAndInstallVPNProfile()
+        alert.addAction(UIAlertAction(title: "复制服务器地址", style: .default) { _ in
+            UIPasteboard.general.string = config.host
+            let toast = UIAlertController(title: "已复制", message: config.host, preferredStyle: .alert)
+            self.present(toast, animated: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                toast.dismiss(animated: true)
+            }
         })
 
-        present(alert, animated: true)
-    }
-
-    private func exportAndInstallVPNProfile() {
-        // 从应用Bundle中读取mobileconfig文件
-        guard let profilePath = Bundle.main.path(forResource: "PacketReplayVPN", ofType: "mobileconfig"),
-              let profileData = try? Data(contentsOf: URL(fileURLWithPath: profilePath)) else {
-            showError("无法找到VPN配置文件")
-            return
-        }
-
-        // 保存到临时目录
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("PacketReplayVPN.mobileconfig")
-        do {
-            try profileData.write(to: tempURL)
-
-            // 使用UIActivityViewController分享/安装
-            let activityVC = UIActivityViewController(activityItems: [tempURL], applicationActivities: nil)
-            activityVC.completionWithItemsHandler = { [weak self] _, completed, _, _ in
-                if completed {
-                    let successAlert = UIAlertController(
-                        title: "下一步",
-                        message: "描述文件已保存。\n\n请打开\"文件\"App，找到\"PacketReplayVPN.mobileconfig\"文件，点击安装。\n\n或者：\n设置 → 已下载描述文件 → 安装",
-                        preferredStyle: .alert
-                    )
-                    successAlert.addAction(UIAlertAction(title: "好的", style: .default))
-                    self?.present(successAlert, animated: true)
-                }
+        alert.addAction(UIAlertAction(title: "打开WiFi设置", style: .default) { _ in
+            if let url = URL(string: "App-Prefs:root=WIFI") {
+                UIApplication.shared.open(url)
             }
+        })
 
-            present(activityVC, animated: true)
+        alert.addAction(UIAlertAction(title: "关闭", style: .cancel))
 
-        } catch {
-            showError("导出失败: \(error.localizedDescription)")
-        }
+        present(alert, animated: true)
     }
 
     private func showError(_ message: String) {
