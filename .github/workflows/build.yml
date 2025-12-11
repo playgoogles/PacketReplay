@@ -26,7 +26,7 @@ jobs:
         xcodebuild -version
         xcrun --sdk iphoneos --show-sdk-path
 
-    - name: 编译Swift代码
+    - name: 编译主应用
       run: |
         mkdir -p build/Payload/PacketReplay.app
 
@@ -45,6 +45,22 @@ jobs:
         fi
 
         chmod +x build/Payload/PacketReplay.app/PacketReplay
+
+    - name: 编译Extension
+      run: |
+        mkdir -p build/Payload/PacketReplay.app/PlugIns/PacketTunnelExtension.appex
+
+        swiftc -sdk $(xcrun --sdk iphoneos --show-sdk-path) \
+          -target arm64-apple-ios14.0 \
+          -O \
+          -emit-executable \
+          -o build/Payload/PacketReplay.app/PlugIns/PacketTunnelExtension.appex/PacketTunnelExtension \
+          PacketTunnelExtension/PacketTunnelProvider.swift
+
+        cp PacketTunnelExtension/Info.plist build/Payload/PacketReplay.app/PlugIns/PacketTunnelExtension.appex/
+        cp PacketTunnelExtension/PacketTunnelExtension.entitlements build/Payload/PacketReplay.app/PlugIns/PacketTunnelExtension.appex/
+
+        chmod +x build/Payload/PacketReplay.app/PlugIns/PacketTunnelExtension.appex/PacketTunnelExtension
 
     - name: 打包IPA
       run: |
