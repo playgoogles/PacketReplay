@@ -36,5 +36,9 @@
     </array>
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <false/>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>需要访问本地网络以拦截和重放网络数据包</string>
+    <key>NSUserTrackingUsageDescription</key>
+    <string>用于抓取和分析网络请求，不会上传任何数据</string>
 </dict>
 </plist>

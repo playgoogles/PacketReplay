@@ -29,7 +29,7 @@ class MainViewController: UIViewController {
         // 状态标签
         statusLabel = UILabel()
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        statusLabel.text = "就绪"
+        statusLabel.text = "就绪 (VPN模式)"
         statusLabel.textAlignment = .center
         statusLabel.font = .systemFont(ofSize: 14)
         statusLabel.textColor = .secondaryLabel
@@ -107,6 +107,7 @@ class MainViewController: UIViewController {
                 if self?.segmentControl.selectedSegmentIndex == 0 {
                     self?.tableView.reloadData()
                 }
+                self?.statusLabel.text = "已抓取 \(self?.packets.count ?? 0) 个包"
             }
         }
 
@@ -114,7 +115,8 @@ class MainViewController: UIViewController {
             DispatchQueue.main.async {
                 self?.isCapturing = capturing
                 self?.updateCaptureButton()
-                self?.statusLabel.text = capturing ? "正在抓包..." : "就绪"
+                self?.statusLabel.text = capturing ? "正在抓包... (VPN已连接)" : "就绪 (VPN模式)"
+                self?.statusLabel.textColor = capturing ? .systemGreen : .secondaryLabel
             }
         }
 
@@ -154,7 +156,37 @@ class MainViewController: UIViewController {
         if isCapturing {
             PacketCaptureManager.shared.stopCapture()
         } else {
-            PacketCaptureManager.shared.startCapture()
+            // 显示Loading提示
+            let loadingAlert = UIAlertController(title: "请稍候", message: "正在启动VPN抓包...", preferredStyle: .alert)
+            present(loadingAlert, animated: true)
+
+            // 延迟一下让提示显示出来
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                PacketCaptureManager.shared.startCapture()
+
+                // 3秒后关闭loading
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    loadingAlert.dismiss(animated: true) { [weak self] in
+                        // 检查VPN状态
+                        let status = VPNManager.shared.getCurrentStatus()
+                        if status != .connected && status != .connecting {
+                            // VPN启动可能失败，显示提示
+                            let errorAlert = UIAlertController(
+                                title: "需要授权",
+                                message: "请在弹出的系统提示中点击\"允许\"以启用VPN抓包功能。\n\n如果没有看到提示，请到：\n设置 → 通用 → VPN与设备管理\n中查看VPN配置。",
+                                preferredStyle: .alert
+                            )
+                            errorAlert.addAction(UIAlertAction(title: "我知道了", style: .default))
+                            errorAlert.addAction(UIAlertAction(title: "打开设置", style: .default) { _ in
+                                if let url = URL(string: "App-Prefs:root=General&path=ManagedConfigurationList") {
+                                    UIApplication.shared.open(url)
+                                }
+                            })
+                            self?.present(errorAlert, animated: true)
+                        }
+                    }
+                }
+            }
         }
     }
 
