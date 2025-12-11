@@ -116,26 +116,52 @@ class HTTPProxyServer {
         guard let firstLine = lines.first else { return }
 
         let components = firstLine.components(separatedBy: " ")
-        guard components.count >= 3 else { return }
+        guard components.count >= 2 else { return }
 
         let method = components[0]
         let urlPath = components[1]
 
-        // 解析Host
+        // 解析Headers
         var host = ""
+        var port: UInt16 = 80
         var headers: [String: String] = [:]
 
-        for line in lines.dropFirst() {
-            if line.isEmpty { break }
-            if let colonIndex = line.firstIndex(of: ":") {
-                let key = String(line[..<colonIndex])
-                let value = String(line[line.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
-                headers[key] = value
+        // 如果是CONNECT方法，直接从请求行解析host:port
+        if method == "CONNECT" {
+            let parts = urlPath.split(separator: ":")
+            if parts.count == 2 {
+                host = String(parts[0])
+                port = UInt16(parts[1]) ?? 443
+            }
+        } else {
+            // 普通HTTP请求，从Host头解析
+            for line in lines.dropFirst() {
+                if line.isEmpty { break }
+                if let colonIndex = line.firstIndex(of: ":") {
+                    let key = String(line[..<colonIndex])
+                    let value = String(line[line.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
+                    headers[key] = value
 
-                if key.lowercased() == "host" {
-                    host = value
+                    if key.lowercased() == "host" {
+                        if value.contains(":") {
+                            let parts = value.split(separator: ":")
+                            host = String(parts[0])
+                            port = UInt16(parts[1]) ?? 80
+                        } else {
+                            host = value
+                            port = 80
+                        }
+                    }
                 }
             }
+        }
+
+        // 生成请求URL
+        let requestURL: String
+        if method == "CONNECT" {
+            requestURL = "https://\(host):\(port)"
+        } else {
+            requestURL = "http://\(host)\(urlPath)"
         }
 
         let packet = CapturedPacket(
@@ -144,11 +170,11 @@ class HTTPProxyServer {
             sourceIP: "127.0.0.1",
             destinationIP: host,
             sourcePort: 0,
-            destinationPort: 80,
-            protocolType: .http,
+            destinationPort: port,
+            protocolType: method == "CONNECT" ? .https : .http,
             data: data,
             processName: method,
-            requestURL: "http://\(host)\(urlPath)",
+            requestURL: requestURL,
             headers: headers
         )
 
@@ -316,13 +342,62 @@ class HTTPProxyServer {
 
     // 双向转发数据（用于CONNECT隧道）
     private func bidirectionalForward(client: NWConnection, server: NWConnection) {
+        // 使用独立的状态跟踪
+        var clientClosed = false
+        var serverClosed = false
+        let closeLock = NSLock()
+
         // 客户端 -> 服务器
-        forwardData(from: client, to: server, direction: "C->S")
+        func forwardClientToServer() {
+            client.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
+                if let data = data, !data.isEmpty {
+                    print("🔄 [C->S] 转发 \(data.count) 字节")
+                    server.send(content: data, completion: .contentProcessed { _ in })
+
+                    if !isComplete {
+                        forwardClientToServer()
+                    }
+                } else if isComplete || error != nil {
+                    print("⏹️ [C->S] 客户端关闭")
+                    closeLock.lock()
+                    clientClosed = true
+                    if serverClosed {
+                        client.cancel()
+                        server.cancel()
+                    }
+                    closeLock.unlock()
+                }
+            }
+        }
+
         // 服务器 -> 客户端
-        forwardData(from: server, to: client, direction: "S->C")
+        func forwardServerToClient() {
+            server.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
+                if let data = data, !data.isEmpty {
+                    print("🔄 [S->C] 转发 \(data.count) 字节")
+                    client.send(content: data, completion: .contentProcessed { _ in })
+
+                    if !isComplete {
+                        forwardServerToClient()
+                    }
+                } else if isComplete || error != nil {
+                    print("⏹️ [S->C] 服务器关闭")
+                    closeLock.lock()
+                    serverClosed = true
+                    if clientClosed {
+                        client.cancel()
+                        server.cancel()
+                    }
+                    closeLock.unlock()
+                }
+            }
+        }
+
+        forwardClientToServer()
+        forwardServerToClient()
     }
 
-    // 单向转发数据
+    // 单向转发数据（已废弃，使用上面的bidirectionalForward代替）
     private func forwardData(from source: NWConnection, to destination: NWConnection, direction: String) {
         source.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
             if let data = data, !data.isEmpty {
