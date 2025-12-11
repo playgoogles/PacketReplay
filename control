@@ -1,0 +1,9 @@
+Package: com.packet.replay
+Name: 抓包重放工具
+Version: 1.0
+Architecture: iphoneos-arm64
+Description: iOS抓包与重放工具，支持定时重放功能
+Maintainer: PacketReplay
+Author: PacketReplay
+Section: Applications
+Depends: firmware (>= 14.0)

@@ -1,0 +1,21 @@
+export TARGET = iphone:clang:latest:14.0
+export ARCHS = arm64
+
+include $(THEOS)/makefiles/common.mk
+
+APPLICATION_NAME = PacketReplay
+
+PacketReplay_FILES = \
+	Sources/AppDelegate.swift \
+	Sources/PacketModel.swift \
+	Sources/PacketCapture.swift \
+	Sources/PacketReplay.swift \
+	Sources/SchedulerManager.swift \
+	Sources/MainViewController.swift \
+	Sources/ViewControllers.swift
+
+PacketReplay_FRAMEWORKS = UIKit Foundation Network UserNotifications
+PacketReplay_CFLAGS = -fobjc-arc
+PacketReplay_CODESIGN_FLAGS = -SEntitlements.plist
+
+include $(THEOS_MAKE_PATH)/application.mk
