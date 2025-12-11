@@ -215,6 +215,35 @@ class HTTPProxyServer {
 
         print("🎯 转发到: \(targetHost):\(targetPort)")
 
+        // 修改请求：把绝对URL改成相对路径
+        // 例如: GET http://www.baidu.com/index.html HTTP/1.1
+        // 改成: GET /index.html HTTP/1.1
+        var modifiedRequest = requestString
+        if let firstLine = lines.first {
+            let components = firstLine.components(separatedBy: " ")
+            if components.count >= 3 {
+                let method = components[0]
+                let url = components[1]
+                let version = components[2]
+
+                // 如果URL是绝对URL（http://开头），转换成相对路径
+                if url.hasPrefix("http://") || url.hasPrefix("https://") {
+                    if let urlObj = URL(string: url), let path = urlObj.path.isEmpty ? "/" : urlObj.path as String? {
+                        let relativePath = path + (urlObj.query.map { "?\($0)" } ?? "")
+                        let newFirstLine = "\(method) \(relativePath) \(version)"
+                        modifiedRequest = modifiedRequest.replacingOccurrences(of: firstLine, with: newFirstLine)
+                        print("🔧 修改请求行: \(firstLine) -> \(newFirstLine)")
+                    }
+                }
+            }
+        }
+
+        guard let modifiedData = modifiedRequest.data(using: .utf8) else {
+            print("❌ 无法转换修改后的请求")
+            clientConnection.cancel()
+            return
+        }
+
         // 连接到目标服务器
         let host = NWEndpoint.Host(targetHost)
         let port = NWEndpoint.Port(rawValue: targetPort)!
@@ -224,8 +253,8 @@ class HTTPProxyServer {
             switch state {
             case .ready:
                 print("✅ 已连接到目标服务器")
-                // 发送请求到目标服务器
-                serverConnection.send(content: data, completion: .contentProcessed { error in
+                // 发送修改后的请求到目标服务器
+                serverConnection.send(content: modifiedData, completion: .contentProcessed { error in
                     if let error = error {
                         print("❌ 发送失败: \(error)")
                         clientConnection.cancel()
