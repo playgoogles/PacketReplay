@@ -2,24 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>platform-application</key>
-    <true/>
-    <key>com.apple.private.network.socket-delegate</key>
-    <true/>
-    <key>com.apple.private.NetworkExtension</key>
-    <true/>
-    <key>com.apple.private.security.storage.AppDataContainers</key>
-    <true/>
-    <key>com.apple.private.security.container-required</key>
-    <false/>
     <key>com.apple.developer.networking.networkextension</key>
     <array>
         <string>packet-tunnel-provider</string>
-        <string>app-proxy-provider</string>
     </array>
     <key>com.apple.security.application-groups</key>
     <array>
         <string>group.com.packet.replay</string>
     </array>
+    <key>com.apple.private.network.socket-delegate</key>
+    <true/>
+    <key>com.apple.private.NetworkExtension</key>
+    <true/>
 </dict>
 </plist>
