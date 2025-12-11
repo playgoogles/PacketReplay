@@ -247,7 +247,7 @@ class MainViewController: UIViewController {
     private func exportAndInstallVPNProfile() {
         // 从应用Bundle中读取mobileconfig文件
         guard let profilePath = Bundle.main.path(forResource: "PacketReplayVPN", ofType: "mobileconfig"),
-              let profileData = try? Data(contentsOf: URL(fileURLPath: profilePath)) else {
+              let profileData = try? Data(contentsOf: URL(fileURLWithPath: profilePath)) else {
             showError("无法找到VPN配置文件")
             return
         }
